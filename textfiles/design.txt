@@ -1,0 +1,44 @@
+  I. addfilefs
+ II. removefilefs
+III. extractfilefs
+ IV. lsfs
+
+ I. addfilefs
+ 	
+	Adding files seems to have been the big obstacle to pass in this project. In order to tackle this entire project, I wrote sfs.c to only accept regular files originally to work through how to get the data from the files onto the system. Based on the archiving homework, I had to get the data from the file on to the file system. To do that in this project, I had to use the file size to separate the blocks into 512 byte chunks. Then for each block, I copied the data into a char array and copied that block based on the size to a block in the file system. When I had a block, it was allocated and counted in the free block list. When the full file was read and all the blocks were allocated, the found block list was copied to the inode.
+
+	This is where it started to get a little rough. When I started working with directories, I thought that the best way to go about it was to do it the exact same way as I did regular files. This resulted in reading the directories as regular files by using a DIR type and readign the directory by directory entry name and making a block out of that. I ran into some trouble with this though as this was fixing the size of the block list that contained references to blocks that contained directions to the inodes of the files in the directory. I wasn't able to add a new file in a directory and add that to the file system, when I was reading the file path, if the path already existed, I skipped adding it to the system, so I was skipping over any new entries added to the fs. I was adding the file to the file system, but it wasn't apart of any directory. To try and remedy this, I made a root node upon formatting the file system. Doing this was actually super helpful when adding files to the system consecutively, but it still didn't solve the dangling file. Then I tried using a full file path as a file name, but this was extremely tedious because I had to write a whole new function to link the child files to their parent, and it STILL didn't solve the fact that the directory blocks were fixed, and I basically had to add the directory file to the system again as well as the regular file I was originally trying to add. To fix all of this, I had to entirely remove the original add directory function, remake the node so that it held the file name, file path, and a reference to the parent node. Whenever a directory is added, only the node is made. Any file that is added receives the parent node's inode number, and a block is created for that file. That block number is then added to the parent directory's block list. The data for that block becomes the full path of the child so that it doesn't get confused with another file (which was a problem when searching the node list to see if the file itself already existed).
+
+Add utility functions:
+	sfs.c:add_reg(char *path, char *fname, int parent, int inode) // adds a regular file to the system
+	sfs.c:add_dir(char *path, char *fname, int parent, int inode) // adds a directory node to the system
+	sfs.c:getblocks(FILE *file) // gets the blocks necessary to add a regular file to the system
+	sfs.c:add_parent(char *path, int parent, int inode) // creates a block reference in the parent node
+	sfs.c:nodes_needed(char *path) // gets the number of new nodes to be added by splitting path up. if the path already exists then don't add another node
+	sfs.c:exists(char *path) // returns whether or not the file exists in the system based on the full file path
+
+II. removefilefs
+
+	In order to implement the removefilefs function, I approached it in the same way I did with the addfilefs function. I was able to remove regular files before I started anywhere else by resetting all of the blocks allocated to the nodes in the regular files and clearing the bits recorded in the free block list, then resetting the node at the very end of it all.
+
+	Things started to complicate only when the parameters of the assignment required that if the last file is deleted in a directory, then the directory is deleted. To solve this problem, after removing the node, I checked through the parent block lists, and if each child has been removed from the fs, all of the blocks in the parents' block list will be -1 signifying the block is pointing to a file that isn't in the file system anymore. If all of the block numbers are -1 in the parent directory, then the removefilefs function is called recursively and passed the parent node for deletion. This works all way up the chain until it either reaches a node that still has files in it, or the root (which isn't deleted). If a directory is passed in the original call, the directory block list will be looped through, and if the block reference is greater than -1, the file path in the form of block data is passed recursively to the removefilefs function, where it is searched for in the node list, and deleted accordingly. Each file in the directory and all subdirectories are deleted until they're all deleted, then the directory originally passed will be deleted in the same fashion as a regular file, resetting its block reference in the parent node and deleting the parent node if necessary.
+
+Remove utility functions:
+	sfs.c:bfree(int block) // resets the block reference in the free block list and clears the data in the block
+	sfs.c:ifree(int node) // resets all the data for the referenced inode
+	sfs.c:reset_pblock(int child) // finds the node referenced by the block in the parent block list, and sets it to -1
+	sfs.c:dempty(int parent) // returns an int to identify whether the parent node is empty
+
+III. extractfilefs
+	
+	Fairly straightforward, the file will be searched for based on the full path passed, and printed to stdout. Given the assignment instructions specify that the redirect will be in the clr, all that needs to be done is to print the data in the blocks assigned to the node referenced.
+
+Extract utility functions:
+	None
+
+IV. lsfs
+
+	Listing regular files was as straightforward as extractfilefs in the sense that the nodes just had to be looped through. Fortunately, I started with adding files, which evolved into adding directories. When I started adding directories, I implemented a root node which acted as an entry directory. With that, I was able to create a print function that printed a file based on the directory passed. For each child in the directory, a new call to printfs was createdand passed the next file in the directory based on the node it was given.
+
+List utility functions:
+	sfs.c:printfs(int node, char *indent, int last) // prints the file specified by the node passed, the indent which grows as child nodes are passed, and an indicator whether or not the last child in the parent was passed (for indentation purposes)
